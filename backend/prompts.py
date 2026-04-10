@@ -19,14 +19,17 @@ from prompt_agents import (
     UI_STRUCTURE_PLANNER_PROMPT,
     UI_AGENT_GARBLED_PROMPT,
     UI_SPECIALIZED_GARBLED_PROMPT,
+    UI_AGENT_STACKING_PROMPT,
+    UI_SPECIALIZED_STACKING_PROMPT,
 )
 
-UI_CHECK_PROMPT = f"""【多专项 Agent 协同检测（6 类）】
-你将串行执行 6 个专项 Agent，每个 Agent 只负责一种类型：
+UI_CHECK_PROMPT = f"""【多专项 Agent 协同检测（7 类）】
+你将串行执行 7 个专项 Agent，每个 Agent 只负责一种类型：
 - 异常换行
 - 文字超框/溢出
 - 文字截断
 - 文字重叠
+- UI堆叠
 - 乱码/编码问题
 - 整体 UI 结构问题
 
@@ -40,24 +43,27 @@ UI_CHECK_PROMPT = f"""【多专项 Agent 协同检测（6 类）】
 
 {UI_AGENT_OVERLAP_PROMPT}
 
+{UI_AGENT_STACKING_PROMPT}
+
 {UI_AGENT_GARBLED_PROMPT}
 
 {UI_AGENT_STRUCTURE_PROMPT}
 
 【汇总规则（必须执行）】
 1) 最终 has_issues：只要任一专项 Agent 发现问题即为 true，否则 false。
-2) issues 只允许包含上述 6 类 type：
+2) issues 只允许包含上述 7 类 type：
    - 异常换行
    - 文字超框/溢出
    - 文字截断
    - 文字重叠
+   - UI堆叠
    - 乱码/编码问题
    - UI 结构/布局问题
 3) structure_ok/structure_assessment 必须给出（即使 structure_ok=true）。
 4) 若 has_issues=false，则 issues 必须为空，score 建议 >= 90。
-5) 若包含"文字截断"或"文字重叠"或"乱码/编码问题"，score 必须 < 80。
+5) 若包含"文字截断"或"文字重叠"或"乱码/编码问题"或"UI堆叠"，score 必须 < 80。
 6) summary 必须与 issues 完全一致，不允许自相矛盾。
-7) 必须输出 agent_process，且严格包含 6 个专项 Agent 的过程记录（按固定顺序）。
+7) 必须输出 agent_process，且严格包含 7 个专项 Agent 的过程记录（按固定顺序）。
 
 请按以下 JSON 返回：
 ```json
@@ -91,6 +97,12 @@ UI_CHECK_PROMPT = f"""【多专项 Agent 协同检测（6 类）】
       "reason": "该 Agent 的判断理由（仅基于可见证据）"
     }},
     {{
+      "agent": "堆叠Agent",
+      "issue_type": "UI堆叠",
+      "has_issue": true或false,
+      "reason": "该 Agent 的判断理由（仅基于可见证据）"
+    }},
+    {{
       "agent": "乱码Agent",
       "issue_type": "乱码/编码问题",
       "has_issue": true或false,
@@ -105,7 +117,7 @@ UI_CHECK_PROMPT = f"""【多专项 Agent 协同检测（6 类）】
   ],
   "issues": [
     {{
-      "type": "异常换行/文字超框/溢出/文字截断/文字重叠/乱码/编码问题/UI 结构/布局问题",
+      "type": "异常换行/文字超框/溢出/文字截断/文字重叠/UI堆叠/乱码/编码问题/UI 结构/布局问题",
       "description": "必须是可见证据，不得臆测",
       "location": "具体位置（区域/组件/行）",
       "severity": "high/medium/low",
@@ -123,6 +135,7 @@ UI_SPECIALIZED_AGENT_PROMPTS = {
     "文字超框/溢出": UI_SPECIALIZED_OVERFLOW_PROMPT,
     "文字截断": UI_SPECIALIZED_TRUNCATION_PROMPT,
     "文字重叠": UI_SPECIALIZED_OVERLAP_PROMPT,
+    "UI堆叠": UI_SPECIALIZED_STACKING_PROMPT,
     "乱码/编码问题": UI_SPECIALIZED_GARBLED_PROMPT,
 }
 

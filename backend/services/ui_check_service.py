@@ -170,6 +170,7 @@ class UICheckService:
                 "文字超框/溢出": "overflow",
                 "文字截断": "truncation",
                 "文字重叠": "overlap",
+                "UI堆叠": "stacking",
                 "乱码/编码问题": "garbled",
             }.get(issue_type, "unknown")
             content = [{"type": "image_url", "image_url": {"url": full_data_url}}]
@@ -247,7 +248,7 @@ class UICheckService:
         async def parallel_agents_node(state: UICheckGraphState):
             full_data_url = state["full_data_url"]
             crops = state.get("crops", [])
-            issue_types = ["异常换行", "文字超框/溢出", "文字截断", "文字重叠", "乱码/编码问题"]
+            issue_types = ["异常换行", "文字超框/溢出", "文字截断", "文字重叠", "UI堆叠", "乱码/编码问题"]
             results = await asyncio.gather(
                 *[run_specialized_agent(t, full_data_url, crops) for t in issue_types]
             )
@@ -313,7 +314,7 @@ class UICheckService:
                 else:
                     penalty += 15
             score = max(0, 100 - penalty)
-            if any((i.get("type") in ["文字截断", "文字重叠", "乱码/编码问题"]) for i in issues):
+            if any((i.get("type") in ["文字截断", "文字重叠", "UI堆叠", "乱码/编码问题"]) for i in issues):
                 score = min(score, 79)
             main_types = "、".join(sorted(set([i.get("type", "") for i in issues if i.get("type")]))) if issues else "无"
             summary = (
@@ -535,8 +536,8 @@ class UICheckService:
             f"structure_assessment={(structure_assessment or 'N/A')[:120]}"
         )
 
-        # 2) 5 个专项 Agent（全图 + 裁剪图）
-        agent_types = ["异常换行", "文字超框/溢出", "文字截断", "文字重叠", "乱码/编码问题"]
+        # 2) 6 个专项 Agent（全图 + 裁剪图）
+        agent_types = ["异常换行", "文字超框/溢出", "文字截断", "文字重叠", "UI堆叠", "乱码/编码问题"]
         issues = []
         agent_process = []
         for t in agent_types:
@@ -555,6 +556,7 @@ class UICheckService:
                     "文字超框/溢出": "overflow",
                     "文字截断": "truncation",
                     "文字重叠": "overlap",
+                    "UI堆叠": "stacking",
                     "乱码/编码问题": "garbled",
                 }.get(t, "unknown")
                 out = self._chat_once(
@@ -685,7 +687,7 @@ class UICheckService:
             else:
                 penalty += 15
         score = max(0, 100 - penalty)
-        if any((i.get("type") in ["文字截断", "文字重叠"]) for i in issues):
+        if any((i.get("type") in ["文字截断", "文字重叠", "UI堆叠"]) for i in issues):
             score = min(score, 79)
         main_types = "、".join(sorted(set([i.get("type", "") for i in issues if i.get("type")]))) if issues else "无"
         summary = (
@@ -733,6 +735,7 @@ class UICheckService:
             ("超框溢出Agent", "文字超框/溢出"),
             ("截断Agent", "文字截断"),
             ("重叠Agent", "文字重叠"),
+            ("堆叠Agent", "UI堆叠"),
             ("乱码Agent", "乱码/编码问题"),
             ("结构Agent", "UI 结构/布局问题"),
         ]
@@ -839,6 +842,12 @@ class UICheckService:
             for issue in issues
         )
         
+        # 检查是否有堆叠问题
+        has_stacking_issue = any(
+            issue.get("type") == "UI堆叠" or "堆叠" in issue.get("type", "")
+            for issue in issues
+        )
+        
         # 检查是否有超框/溢出问题（包括贴边风险）
         has_overflow_issue = any(
             issue.get("type") == "文字超框/溢出" or "超框" in issue.get("type", "") or "溢出" in issue.get("type", "")
@@ -851,7 +860,7 @@ class UICheckService:
             phrase in summary_text
             for phrase in [
                 "未发现任何", "未发现任何文字显示问题", "无任何问题", "无截断", "无乱码",
-                "无异常换行", "无溢出", "无重叠", "显示完美", "整体文字显示质量完美",
+                "无异常换行", "无溢出", "无重叠", "无堆叠", "显示完美", "整体文字显示质量完美",
                 "无截断、乱码、异常换行", "all characters", "无问题", "no text display issues",
                 "共发现 0 个问题", "问题总数：0", "未见截断", "未见乱码", "均未见", "未见任何",
             ]
@@ -864,7 +873,7 @@ class UICheckService:
             if config.DEBUG:
                 print("⚠️ summary/模型声明无问题但 issues 非空，以无问题为准，清除 issues")
             issues = []
-            has_truncation = has_linebreak_issue = has_garbled_issue = False
+            has_truncation = has_linebreak_issue = has_garbled_issue = has_stacking_issue = False
             has_issues = False
             result["score"] = min(100, max(result.get("score", 100), 95))
 
@@ -927,6 +936,24 @@ class UICheckService:
                 has_garbled_issue = True
                 has_issues = True
 
+        if raw_response_text and not summary_says_no_issues and not model_says_no_issues and not has_stacking_issue:
+            stacking_positive = ["堆叠", "叠在", "叠放", "层叠", "遮挡", "覆盖了", "压在", "stacking", "z-index", "z轴"]
+            stacking_negative = ["无堆叠", "未见堆叠", "未发现堆叠", "no stacking", "共发现 0 个问题"]
+            has_pos = any(k in raw_response_text for k in stacking_positive)
+            has_neg = any(k in raw_response_text for k in stacking_negative)
+            if has_pos and not has_neg:
+                if config.DEBUG:
+                    print("⚠️ 原始响应提到UI堆叠但结果中没有，自动添加堆叠问题")
+                issues.append({
+                    "type": "UI堆叠",
+                    "description": "检测到UI元素堆叠问题（从原始响应中识别）",
+                    "location": "需要进一步检查",
+                    "severity": "high",
+                    "suggestion": "检查元素层级关系，调整 z-index 或布局避免错误遮挡"
+                })
+                has_stacking_issue = True
+                has_issues = True
+
         if raw_response_text and not summary_says_no_issues and not model_says_no_issues and not has_overflow_issue:
             overflow_positive = ["超框", "溢出", "贴边", "挤边", "压边", "越界", "紧贴边界", "overflow", "clipping risk"]
             overflow_negative = ["无超框", "无溢出", "无贴边", "未见超框", "未见溢出", "未见贴边", "共发现 0 个问题"]
@@ -945,8 +972,8 @@ class UICheckService:
                 has_overflow_issue = True
                 has_issues = True
         
-        # 规则2：如果检测到截断、异常换行或乱码问题，但得分 >= 80，这是矛盾的，需要修正
-        if (has_truncation or has_linebreak_issue or has_garbled_issue) and score >= 80:
+        # 规则2：如果检测到截断、异常换行、乱码或堆叠问题，但得分 >= 80，这是矛盾的，需要修正
+        if (has_truncation or has_linebreak_issue or has_garbled_issue or has_stacking_issue) and score >= 80:
             if config.DEBUG:
                 print(f"⚠️ 检测到矛盾：有截断/乱码/换行问题但得分是 {score}，自动修正为 65")
             
@@ -954,11 +981,13 @@ class UICheckService:
             result["score"] = 65
             result["has_issues"] = True
             
-            # 确保截断问题的严重程度是 high
+            # 确保严重问题的严重程度是 high
             for issue in issues:
                 if issue.get("type") == "文字截断" or "截断" in issue.get("type", ""):
                     issue["severity"] = "high"
                 if issue.get("type") == "乱码/编码问题" or "乱码" in issue.get("type", ""):
+                    issue["severity"] = "high"
+                if issue.get("type") == "UI堆叠" or "堆叠" in issue.get("type", ""):
                     issue["severity"] = "high"
         
         # 规则2.5：存在超框/贴边问题时，得分不应过高

@@ -481,8 +481,8 @@
           </el-dialog>
         </el-tab-pane>
 
-        <!-- Leader Agent 入口 -->
-        <el-tab-pane label="🎯 Leader Agent" name="leader">
+        <!-- Leader Agent 入口（暂时隐藏） -->
+        <el-tab-pane v-if="false" label="🎯 Leader Agent" name="leader">
           <el-card class="leader-card">
             <template #header>
               <div class="card-header">
@@ -737,8 +737,8 @@
           </el-card>
         </el-tab-pane>
 
-        <!-- 数据管理：DB / RAG 可视化 -->
-        <el-tab-pane label="📊 数据管理" name="data">
+        <!-- 数据管理：DB / RAG 可视化（暂时隐藏） -->
+        <el-tab-pane v-if="false" label="📊 数据管理" name="data">
           <el-card class="data-card">
             <template #header>
               <div class="card-header">
@@ -1022,7 +1022,7 @@ const UI_CHECK_PHASES = [
   '结构 Agent：生成聚焦区域',
   '专项 Agent：异常换行',
   '专项 Agent：超框/溢出',
-  '专项 Agent：截断/重叠与汇总'
+  '专项 Agent：截断/重叠/堆叠与汇总'
 ]
 
 const FULL_ANALYZE_PHASES = [
@@ -1557,6 +1557,7 @@ const ISSUE_TYPE_OPTIONS = [
   { label: '文字超框/溢出', value: '文字超框/溢出' },
   { label: '文字截断', value: '文字截断' },
   { label: '文字重叠', value: '文字重叠' },
+  { label: 'UI堆叠', value: 'UI堆叠' },
   { label: '乱码/编码问题', value: '乱码/编码问题' },
 ]
 
